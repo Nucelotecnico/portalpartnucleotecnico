@@ -1,0 +1,8 @@
+# Ignorar arquivo local com credenciais reais do Supabase
+supabase-config.js
+
+# Pastas e arquivos temporários / debug
+.dbg/
+.DS_Store
+Thumbs.db
+*.log

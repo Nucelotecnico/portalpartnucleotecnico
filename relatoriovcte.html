@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VCTE — Verificação de Conformidade Técnica</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy: #0A1628;
+  --blue-deep: #1B3A6B;
+  --blue-elec: #2D6BE4;
+  --blue-light: #F0F4FF;
+  --white: #FFFFFF;
+  --amber: #E8B900;
+  --green: #1A7A4A;
+  --red: #C0392B;
+  --gray: #6B7280;
+  --gray-light: #E5E7EB;
+  --gray-border: #D1D5DB;
+  --text: #111827;
+  --text-sub: #4B5563;
+  --sidebar-w: 280px;
+  --radius: 10px;
+  --shadow: 0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+}
+html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--blue-light); color: var(--text); }
+button { cursor: pointer; font-family: inherit; }
+input, textarea, select { font-family: inherit; }
+
+/* ===== LAYOUT ===== */
+#app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ===== CONFIG SCREEN ===== */
+#config-screen {
+  position: fixed; inset: 0; background: var(--navy);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+  flex-direction: column; gap: 24px;
+}
+.config-card {
+  background: #fff; border-radius: 16px; padding: 40px 48px;
+  max-width: 520px; width: 90%; box-shadow: 0 24px 80px rgba(0,0,0,.4);
+}
+.config-card h1 { font-size: 22px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+.config-card p { color: var(--gray); font-size: 14px; margin-bottom: 28px; }
+.config-card .field { margin-bottom: 16px; }
+.config-card label { display: block; font-size: 12px; font-weight: 600; color: var(--text-sub); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.config-card input { width: 100%; border: 1.5px solid var(--gray-border); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.config-card input:focus { outline: none; border-color: var(--blue-elec); }
+.btn-primary {
+  background: var(--blue-elec); color: #fff; border: none; border-radius: 8px;
+  padding: 12px 24px; font-size: 15px; font-weight: 600; width: 100%;
+  transition: background .15s;
+}
+.btn-primary:hover { background: #1B55C4; }
+.config-badge { color: var(--amber); font-size: 12px; font-weight: 600; text-align: center; }
+
+/* ===== SIDEBAR ===== */
+#sidebar {
+  width: var(--sidebar-w); background: var(--navy); height: 100vh;
+  display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+}
+.sidebar-header { padding: 28px 24px 20px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.sidebar-logo { font-size: 11px; font-weight: 700; color: var(--amber); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+.sidebar-title { font-size: 17px; font-weight: 800; color: #fff; }
+.sidebar-sub { font-size: 12px; color: rgba(255,255,255,.4); margin-top: 2px; }
+
+/* Progress line */
+.steps-nav { padding: 24px 20px; flex: 1; position: relative; }
+.steps-line {
+  position: absolute; left: 39px; top: 36px; bottom: 36px;
+  width: 2px; background: rgba(255,255,255,.1);
+}
+.steps-line-fill {
+  position: absolute; left: 0; top: 0; width: 100%;
+  background: var(--blue-elec); transition: height .4s ease;
+}
+.step-item {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 6px 0; cursor: pointer; position: relative; z-index: 1;
+}
+.step-dot {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,.2); background: var(--navy);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s; margin-top: 2px;
+}
+.step-item.done .step-dot { background: var(--blue-elec); border-color: var(--blue-elec); }
+.step-item.active .step-dot { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 4px rgba(232,185,0,.2); }
+.step-dot svg { display: none; }
+.step-item.done .step-dot svg { display: block; }
+.step-label { font-size: 13px; color: rgba(255,255,255,.4); line-height: 1.3; transition: color .2s; padding: 2px 0; }
+.step-num { font-size: 10px; color: rgba(255,255,255,.25); display: block; margin-bottom: 2px; font-family: 'JetBrains Mono'; }
+.step-item.active .step-label { color: #fff; font-weight: 600; }
+.step-item.done .step-label { color: rgba(255,255,255,.65); }
+
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.08); }
+.btn-list {
+  width: 100%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.8); border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 500;
+  transition: background .15s;
+}
+.btn-list:hover { background: rgba(255,255,255,.12); }
+
+/* ===== MAIN AREA ===== */
+#main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.main-header {
+  background: #fff; border-bottom: 1px solid var(--gray-light);
+  padding: 20px 36px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 10;
+}
+.main-header h2 { font-size: 18px; font-weight: 700; color: var(--navy); }
+.step-counter { font-size: 12px; color: var(--gray); font-family: 'JetBrains Mono'; }
+.main-content { padding: 32px 36px; flex: 1; max-width: 900px; }
+
+/* ===== CARDS ===== */
+.card {
+  background: #fff; border-radius: var(--radius); padding: 28px;
+  box-shadow: var(--shadow); margin-bottom: 20px;
+}
+.card-title { font-size: 13px; font-weight: 700; color: var(--blue-elec); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+.card-title::after { content: ''; flex: 1; height: 1px; background: var(--gray-light); }
+
+/* ===== FORM FIELDS ===== */
+.field-grid { display: grid; gap: 16px; }
+.field-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.field-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.field-group { display: flex; flex-direction: column; gap: 6px; }
+.field-group label { font-size: 12px; font-weight: 600; color: var(--text-sub); }
+.field-group input, .field-group select, .field-group textarea {
+  border: 1.5px solid var(--gray-border); border-radius: 8px; padding: 10px 12px;
+  font-size: 14px; color: var(--text); background: #fff; transition: border-color .15s;
+}
+.field-group input:focus, .field-group select:focus, .field-group textarea:focus {
+  outline: none; border-color: var(--blue-elec); box-shadow: 0 0 0 3px rgba(45,107,228,.1);
+}
+.field-group.mono input { font-family: 'JetBrains Mono'; font-size: 13px; }
+.field-group textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+
+/* ===== RADIO / CHECKBOX ===== */
+.radio-group { display: flex; flex-wrap: wrap; gap: 10px; }
+.radio-btn { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1.5px solid var(--gray-border); border-radius: 8px; cursor: pointer; font-size: 14px; transition: all .15s; user-select: none; }
+.radio-btn input { display: none; }
+.radio-btn.active { border-color: var(--blue-elec); background: var(--blue-light); color: var(--blue-elec); font-weight: 600; }
+.radio-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--gray-border); transition: all .15s; flex-shrink: 0; }
+.radio-btn.active .radio-dot { border-color: var(--blue-elec); background: var(--blue-elec); box-shadow: inset 0 0 0 3px #fff; }
+
+/* ===== RESULT BADGE ===== */
+.result-select { display: flex; gap: 12px; flex-wrap: wrap; }
+.result-card { border: 2px solid var(--gray-border); border-radius: 10px; padding: 16px 24px; cursor: pointer; font-weight: 700; font-size: 15px; transition: all .2s; }
+.result-card.atende.active { border-color: var(--green); background: #F0FFF6; color: var(--green); }
+.result-card.nao-atende.active { border-color: var(--red); background: #FFF0F0; color: var(--red); }
+
+/* ===== DYNAMIC TABLE ===== */
+.dyn-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.dyn-table th { background: var(--blue-light); color: var(--blue-deep); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 10px 12px; text-align: left; border-bottom: 2px solid var(--gray-light); }
+.dyn-table td { padding: 8px 10px; border-bottom: 1px solid var(--gray-light); vertical-align: middle; }
+.dyn-table td input { width: 100%; border: 1px solid transparent; border-radius: 5px; padding: 6px 8px; font-size: 13px; background: transparent; }
+.dyn-table td input:focus { border-color: var(--blue-elec); background: #fff; outline: none; }
+.dyn-table td.mono input { font-family: 'JetBrains Mono'; font-size: 12px; }
+.btn-remove-row { background: none; border: none; color: #ccc; font-size: 16px; padding: 4px 8px; transition: color .15s; }
+.btn-remove-row:hover { color: var(--red); }
+.btn-add-row { background: none; border: 1.5px dashed var(--gray-border); border-radius: 8px; padding: 9px 16px; font-size: 13px; color: var(--gray); transition: all .15s; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.btn-add-row:hover { border-color: var(--blue-elec); color: var(--blue-elec); }
+
+/* ===== EQUIPES CARD ===== */
+.equipe-card { background: #fff; border: 1.5px solid var(--gray-border); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+.equipe-header { background: var(--blue-light); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--gray-light); }
+.equipe-header h4 { font-size: 14px; font-weight: 700; color: var(--blue-deep); }
+.btn-remove-equipe { background: none; border: none; color: #ccc; font-size: 18px; transition: color .15s; }
+.btn-remove-equipe:hover { color: var(--red); }
+.equipe-body { padding: 20px; }
+.equipe-veiculo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.equipe-section-label { font-size: 11px; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--gray-light); }
+.btn-add-equipe { width: 100%; background: none; border: 2px dashed var(--blue-elec); border-radius: 10px; padding: 16px; font-size: 14px; color: var(--blue-elec); font-weight: 600; transition: background .15s; margin-top: 8px; }
+.btn-add-equipe:hover { background: var(--blue-light); }
+
+/* ===== FOTO UPLOAD ===== */
+.foto-upload { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.foto-box { border: 2px dashed var(--gray-border); border-radius: 10px; aspect-ratio: 4/3; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all .2s; position: relative; overflow: hidden; background: #FAFAFA; }
+.foto-box:hover { border-color: var(--blue-elec); background: var(--blue-light); }
+.foto-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.foto-box .foto-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; opacity: 0; transition: opacity .2s; }
+.foto-box:hover .foto-overlay { opacity: 1; }
+.foto-label { font-size: 13px; font-weight: 600; color: var(--gray); margin-top: 8px; }
+.foto-icon { font-size: 28px; color: var(--gray-border); }
+input[type=file] { display: none; }
+
+/* ===== NAVIGATION ===== */
+.nav-footer { padding: 24px 36px; border-top: 1px solid var(--gray-light); background: #fff; display: flex; align-items: center; justify-content: space-between; position: sticky; bottom: 0; }
+.btn-back { background: none; border: 1.5px solid var(--gray-border); border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 500; color: var(--text-sub); transition: all .15s; }
+.btn-back:hover { border-color: var(--navy); color: var(--navy); }
+.btn-next { background: var(--blue-elec); color: #fff; border: none; border-radius: 8px; padding: 11px 28px; font-size: 14px; font-weight: 600; transition: background .15s; display: flex; align-items: center; gap: 8px; }
+.btn-next:hover { background: #1B55C4; }
+.btn-generate { background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 11px 28px; font-size: 14px; font-weight: 600; transition: background .15s; display: flex; align-items: center; gap: 8px; }
+.btn-generate:hover { background: #145E39; }
+.progress-info { font-size: 12px; color: var(--gray); text-align: center; }
+
+/* ===== MODAL / LIST SCREEN ===== */
+#modal-overlay { position: fixed; inset: 0; background: rgba(10,22,40,.7); z-index: 500; display: none; align-items: center; justify-content: center; }
+#modal-overlay.open { display: flex; }
+.modal-box { background: #fff; border-radius: 16px; max-width: 780px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal-header { padding: 20px 28px; border-bottom: 1px solid var(--gray-light); display: flex; align-items: center; justify-content: space-between; }
+.modal-header h3 { font-size: 17px; font-weight: 700; color: var(--navy); }
+.btn-close { background: none; border: none; font-size: 22px; color: var(--gray); transition: color .15s; }
+.btn-close:hover { color: var(--navy); }
+.modal-body { overflow-y: auto; padding: 20px 28px; flex: 1; }
+.report-list-item { border: 1.5px solid var(--gray-border); border-radius: 10px; padding: 16px 20px; margin-bottom: 12px; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: space-between; }
+.report-list-item:hover { border-color: var(--blue-elec); background: var(--blue-light); }
+.report-list-item .info h4 { font-size: 14px; font-weight: 700; color: var(--navy); }
+.report-list-item .info p { font-size: 12px; color: var(--gray); margin-top: 3px; font-family: 'JetBrains Mono'; }
+.badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge.atende { background: #E8FFF3; color: var(--green); }
+.badge.nao-atende { background: #FFE8E8; color: var(--red); }
+.badge.rascunho { background: #FFF8E1; color: #B45309; }
+.report-actions { display: flex; gap: 8px; }
+.btn-sm { padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 600; border: none; transition: all .15s; }
+.btn-sm.outline { background: none; border: 1.5px solid var(--gray-border); color: var(--text-sub); }
+.btn-sm.outline:hover { border-color: var(--blue-elec); color: var(--blue-elec); }
+.btn-sm.danger { background: #FFE8E8; color: var(--red); }
+.btn-sm.primary { background: var(--blue-elec); color: #fff; }
+
+/* ===== TOAST ===== */
+#toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; transform: translateY(80px); opacity: 0; transition: all .25s; z-index: 9999; max-width: 340px; }
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.success { background: var(--green); }
+#toast.error { background: var(--red); }
+
+/* ===== LOADING ===== */
+.spin { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== PDF TEMPLATE (hidden) ===== */
+#pdf-template { display: none; }
+
+/* ===== RESPONSIVO ===== */
+@media (max-width: 768px) {
+  #sidebar { display: none; }
+  .main-content { padding: 20px 16px; }
+  .field-grid.cols-2, .field-grid.cols-3 { grid-template-columns: 1fr; }
+  .equipe-veiculo { grid-template-columns: 1fr; }
+  .foto-upload { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Config Screen -->
+<div id="config-screen">
+  <div class="config-card">
+    <div style="font-size:28px;margin-bottom:12px">⚡</div>
+    <h1>VCTE — Configuração</h1>
+    <p>Informe as credenciais do Supabase para habilitar persistência de dados.</p>
+    <div class="field">
+      <label>Supabase URL</label>
+      <input type="text" id="cfg-url" placeholder="https://xxxxxxxxxxx.supabase.co">
+    </div>
+    <div class="field">
+      <label>Supabase Anon Key</label>
+      <input type="text" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIs...">
+    </div>
+    <button class="btn-primary" onclick="initApp()">Entrar <span id="cfg-load"></span></button>
+    <p style="margin-top:16px;font-size:12px;color:#aaa;text-align:center">As credenciais ficam salvas localmente neste navegador.</p>
+  </div>
+  <p class="config-badge">⚠️ Nunca compartilhe sua anon key publicamente</p>
+</div>
+
+<!-- Main App -->
+<div id="app" style="display:none">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">CEMIG · VCTE</div>
+      <div class="sidebar-title">Relatório de Conformidade</div>
+      <div class="sidebar-sub" id="vcte-subtitle">Novo relatório</div>
+    </div>
+    <div class="steps-nav">
+      <div class="steps-line"><div class="steps-line-fill" id="steps-progress-bar"></div></div>
+      <div id="steps-list"></div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn-list" onclick="openModal()">📋 Meus relatórios</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div class="main-header">
+      <h2 id="step-title">Identificação do Relatório</h2>
+      <span class="step-counter" id="step-counter">Etapa 1 de 11</span>
+    </div>
+    <div class="main-content" id="step-content"></div>
+    <div class="nav-footer">
+      <button class="btn-back" id="btn-back" onclick="prevStep()">← Voltar</button>
+      <div class="progress-info" id="progress-info">Rascunho salvo automaticamente</div>
+      <button class="btn-next" id="btn-next" onclick="nextStep()">Próximo →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: lista de relatórios -->
+<div id="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>📋 Meus Relatórios</h3>
+      <button class="btn-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button class="btn-sm primary" onclick="newReport(); closeModal()">+ Novo relatório</button>
+      </div>
+      <div id="reports-list"><p style="color:var(--gray);text-align:center;padding:40px">Carregando...</p></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- PDF Template (rendered off-screen) -->
+<div id="pdf-template"></div>
+
+<script>
+// ===== SUPABASE & CONFIG =====
+let sbClient; // renamed to avoid conflict with the supabase global from the CDN lib
+const SUPABASE_URL_KEY = 'vcte_sb_url';
+const SUPABASE_KEY_KEY = 'vcte_sb_key';
+
+window.initApp = async function() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if (!url || !key) { showToast('Preencha URL e Key do Supabase', 'error'); return; }
+
+  document.getElementById('cfg-load').innerHTML = '<span class="spin"></span>';
+  try {
+    sbClient = window.supabase.createClient(url, key);
+    // Test connection & ensure tables
+    await ensureTables();
+    localStorage.setItem(SUPABASE_URL_KEY, url);
+    localStorage.setItem(SUPABASE_KEY_KEY, key);
+    document.getElementById('config-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    renderSidebar();
+    renderStep();
+    showToast('Conectado ao Supabase ✓', 'success');
+  } catch(e) {
+    showToast('Erro ao conectar: ' + e.message, 'error');
+  }
+  document.getElementById('cfg-load').innerHTML = '';
+}
+
+async function ensureTables() {
+  // Create tables via RPC or direct SQL not possible via anon client
+  // We'll try a read to check if table exists
+  const { error } = await sbClient.from('vcte_relatorios_part').select('id').limit(1);
+  if (error && error.code === '42P01') {
+    // Table doesn't exist — show SQL to user
+    showSqlModal();
+    throw new Error('Tabelas não criadas. Veja o SQL necessário.');
+  }
+}
+
+function showSqlModal() {
+  const sql = `
+-- Execute este SQL no seu projeto Supabase (SQL Editor):
+
+CREATE TABLE IF NOT EXISTS vcte_relatorios_part (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  numero_vcte TEXT,
+  ano TEXT,
+  razao_social TEXT,
+  cnpj TEXT,
+  data_inspecao DATE,
+  data_relatorio DATE,
+  resultado TEXT DEFAULT 'rascunho',
+  dados JSONB DEFAULT '{}',
+  pdf_base64 TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Habilitar RLS e permitir acesso público (ajuste conforme sua política de segurança)
+ALTER TABLE vcte_relatorios_part ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON vcte_relatorios_part FOR ALL USING (true) WITH CHECK (true);
+  `.trim();
+  
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;display:flex;align-items:center;justify-content:center';
+  el.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:32px;max-width:640px;width:95%;max-height:90vh;overflow-y:auto">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:8px">🗃️ Crie a tabela no Supabase</h3>
+      <p style="color:#666;font-size:13px;margin-bottom:16px">Acesse o SQL Editor do seu projeto Supabase e execute o código abaixo:</p>
+      <pre style="background:#0A1628;color:#7DD3FC;padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;white-space:pre-wrap">${sql}</pre>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button onclick="navigator.clipboard.writeText(document.querySelector('pre').textContent);showToast('SQL copiado!','success')" style="background:var(--blue-elec);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer">Copiar SQL</button>
+        <button onclick="this.closest('div[style]').remove()" style="background:#eee;border:none;border-radius:8px;padding:10px 18px;font-size:13px;cursor:pointer">Fechar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+// Auto-login if credentials saved or defined in supabase-config.js
+window.addEventListener('DOMContentLoaded', () => {
+  const url = (window.SUPABASE_URL || localStorage.getItem(SUPABASE_URL_KEY) || '').trim();
+  const key = (window.SUPABASE_ANON_KEY || localStorage.getItem(SUPABASE_KEY_KEY) || '').trim();
+  if (url && key) {
+    document.getElementById('cfg-url').value = url;
+    document.getElementById('cfg-key').value = key;
+    initApp();
+  }
+});
+
+// ===== STATE =====
+let currentStep = 0;
+let currentReportId = null;
+let saveTimer = null;
+
+const DEFAULT_DATA = {
+  // Step 1
+  razao_social: '', cnpj: '', numero_vcte: '', ano: new Date().getFullYear().toString(),
+  data_inspecao: '', data_relatorio: '',
+  // Step 2
+  endereco: '', pessoa_contato: '', telefone: '', email: '',
+  // Step 3
+  tipo_avaliacao: 'habilitacao', grupo: '0832',
+  // Step 4
+  num_uebs: '', resultado: 'ATENDE',
+  // Step 5
+  foto_fachada: null, foto_patio: null,
+  // Step 6
+  equipe_estrutural: [
+    {nome:'',funcao:'Engenheiro Eletricista',cpf:'',ctps:''},
+    {nome:'',funcao:'Téc. Segurança Trabalho',cpf:'',ctps:''},
+    {nome:'',funcao:'Biólogo ou Eng. Agrônomo',cpf:'',ctps:''},
+    {nome:'',funcao:'Supervisor de Projetos',cpf:'',ctps:''},
+    {nome:'',funcao:'Supervisor (por Base Operativa)',cpf:'',ctps:''},
+    {nome:'',funcao:'Diretor Administrativo',cpf:'',ctps:''},
+    {nome:'',funcao:'Responsável Técnico',cpf:'',ctps:''},
+    {nome:'',funcao:'Responsável por Manobras (GDIS PM)',cpf:'',ctps:''}
+  ],
+  // Step 7
+  equipes_campo: [newEquipe(1)],
+  // Step 8
+  observacoes: '',
+  // Step 9
+  geset_data: '', geset_hora: '',
+  // Step 10
+  conclusao: '',
+  // Step 11
+  equipe_envolvida: [{nome:'',regional:''}],
+  responsavel_cemig: '', responsavel_empresa: ''
+};
+
+function newEquipe(n) {
+  return {
+    num: n,
+    placa: '', ano_veiculo: '', marca: '', modelo: '', locado: 'NÃO',
+    fab_cab: '', ano_cab: '', fab_guindauto: '', ano_guindauto: '', fab_cesto: 'NÃO SE APLICA',
+    membros: [
+      {nome:'',funcao:'Encarregado',cpf:'',ctps:''},
+      {nome:'',funcao:'Instalador',cpf:'',ctps:''},
+      {nome:'',funcao:'Instalador',cpf:'',ctps:''},
+      {nome:'',funcao:'Instalador',cpf:'',ctps:''},
+      {nome:'',funcao:'Ajudante',cpf:'',ctps:''},
+      {nome:'',funcao:'Ajudante',cpf:'',ctps:''},
+      {nome:'',funcao:'Motorista',cpf:'',ctps:''}
+    ]
+  };
+}
+
+let formData = JSON.parse(JSON.stringify(DEFAULT_DATA));
+
+// ===== STEPS CONFIG =====
+const STEPS = [
+  { title: 'Identificação do Relatório', label: 'Identificação' },
+  { title: 'Informações Cadastrais', label: 'Cadastro' },
+  { title: 'Dados da Avaliação', label: 'Avaliação' },
+  { title: 'Resultado da Avaliação', label: 'Resultado' },
+  { title: 'Apresentação da Empresa', label: 'Fotos' },
+  { title: 'Equipe Estrutural', label: 'Eq. Estrutural' },
+  { title: 'Equipes de Campo', label: 'Eq. de Campo' },
+  { title: 'Observações Gerais', label: 'Observações' },
+  { title: 'Verificação GESET', label: 'GESET' },
+  { title: 'Conclusão', label: 'Conclusão' },
+  { title: 'Equipe Envolvida & Assinaturas', label: 'Assinaturas' }
+];
+
+// ===== SIDEBAR RENDER =====
+function renderSidebar() {
+  const list = document.getElementById('steps-list');
+  list.innerHTML = STEPS.map((s, i) => `
+    <div class="step-item ${i < currentStep ? 'done' : ''} ${i === currentStep ? 'active' : ''}" onclick="goToStep(${i})">
+      <div class="step-dot">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4l2.5 2.5L9 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="step-label">
+        <span class="step-num">Etapa ${i + 1}</span>
+        ${s.label}
+      </div>
+    </div>
+  `).join('');
+
+  const pct = currentStep / (STEPS.length - 1) * 100;
+  document.getElementById('steps-progress-bar').style.height = pct + '%';
+  document.getElementById('vcte-subtitle').textContent =
+    formData.razao_social ? formData.razao_social.substring(0, 25) + '...' : 'Novo relatório';
+  document.getElementById('step-title').textContent = STEPS[currentStep].title;
+  document.getElementById('step-counter').textContent = `Etapa ${currentStep + 1} de ${STEPS.length}`;
+  document.getElementById('btn-back').style.visibility = currentStep === 0 ? 'hidden' : 'visible';
+  const btnNext = document.getElementById('btn-next');
+  if (currentStep === STEPS.length - 1) {
+    btnNext.className = 'btn-generate';
+    btnNext.innerHTML = '📄 Gerar PDF';
+    btnNext.onclick = generatePDF;
+  } else {
+    btnNext.className = 'btn-next';
+    btnNext.innerHTML = 'Próximo →';
+    btnNext.onclick = nextStep;
+  }
+}
+
+function goToStep(i) {
+  collectCurrentStep();
+  currentStep = i;
+  renderSidebar();
+  renderStep();
+  window.scrollTo(0, 0);
+  document.getElementById('main').scrollTo(0, 0);
+}
+
+// ===== STEP RENDERER =====
+function renderStep() {
+  const container = document.getElementById('step-content');
+  container.innerHTML = '';
+  const renderers = [
+    renderStep1, renderStep2, renderStep3, renderStep4, renderStep5,
+    renderStep6, renderStep7, renderStep8, renderStep9, renderStep10, renderStep11
+  ];
+  renderers[currentStep](container);
+}
+
+// --- STEP 1: Identificação ---
+function renderStep1(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Dados do Relatório</div>
+    <div class="field-grid cols-3" style="margin-bottom:16px">
+      <div class="field-group" style="grid-column:span 3">
+        <label>Razão Social da Empresa Verificada</label>
+        <input type="text" id="razao_social" value="${esc(formData.razao_social)}" placeholder="Nome completo da empresa">
+      </div>
+      <div class="field-group mono">
+        <label>CNPJ</label>
+        <input type="text" id="cnpj" value="${esc(formData.cnpj)}" placeholder="00.000.000/0001-00" maxlength="18">
+      </div>
+      <div class="field-group mono">
+        <label>N° VCTE</label>
+        <input type="text" id="numero_vcte" value="${esc(formData.numero_vcte)}" placeholder="1">
+      </div>
+      <div class="field-group mono">
+        <label>Ano</label>
+        <input type="text" id="ano" value="${esc(formData.ano)}" placeholder="2026">
+      </div>
+    </div>
+    <div class="field-grid cols-2">
+      <div class="field-group">
+        <label>Data da Inspeção</label>
+        <input type="date" id="data_inspecao" value="${esc(formData.data_inspecao)}">
+      </div>
+      <div class="field-group">
+        <label>Data do Relatório</label>
+        <input type="date" id="data_relatorio" value="${esc(formData.data_relatorio)}">
+      </div>
+    </div>
+  </div>`;
+  maskCNPJ();
+}
+
+function maskCNPJ() {
+  const el = document.getElementById('cnpj');
+  if (!el) return;
+  el.addEventListener('input', function() {
+    let v = this.value.replace(/\D/g,'').substring(0,14);
+    if (v.length > 12) v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/,'$1.$2.$3/$4-$5');
+    else if (v.length > 8) v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4}).*/,'$1.$2.$3/$4');
+    else if (v.length > 5) v = v.replace(/^(\d{2})(\d{3})(\d{3}).*/,'$1.$2.$3');
+    else if (v.length > 2) v = v.replace(/^(\d{2})(\d{3}).*/,'$1.$2');
+    this.value = v;
+  });
+}
+
+// --- STEP 2: Cadastro ---
+function renderStep2(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Informações Cadastrais</div>
+    <div class="field-grid">
+      <div class="field-group">
+        <label>Endereço Completo</label>
+        <input type="text" id="endereco" value="${esc(formData.endereco)}" placeholder="Rua, número, bairro, cidade - UF">
+      </div>
+      <div class="field-group">
+        <label>Pessoa de Contato</label>
+        <input type="text" id="pessoa_contato" value="${esc(formData.pessoa_contato)}" placeholder="Nome completo">
+      </div>
+      <div class="field-grid cols-2">
+        <div class="field-group mono">
+          <label>Telefone</label>
+          <input type="text" id="telefone" value="${esc(formData.telefone)}" placeholder="(00) 00000-0000">
+        </div>
+        <div class="field-group">
+          <label>E-mail</label>
+          <input type="email" id="email" value="${esc(formData.email)}" placeholder="contato@empresa.com.br">
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// --- STEP 3: Dados Avaliação ---
+function renderStep3(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Tipo de Avaliação</div>
+    <div class="radio-group" id="tipo-avaliacao">
+      <label class="radio-btn ${formData.tipo_avaliacao==='habilitacao'?'active':''}">
+        <input type="radio" name="tipo" value="habilitacao" ${formData.tipo_avaliacao==='habilitacao'?'checked':''}>
+        <span class="radio-dot"></span> Habilitação Cadastral Inicial
+      </label>
+      <label class="radio-btn ${formData.tipo_avaliacao==='reavaliacao'?'active':''}">
+        <input type="radio" name="tipo" value="reavaliacao" ${formData.tipo_avaliacao==='reavaliacao'?'checked':''}>
+        <span class="radio-dot"></span> Reavaliação
+      </label>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Grupo de Trabalho</div>
+    <div class="radio-group" id="grupo-avaliacao">
+      <label class="radio-btn ${formData.grupo==='0832'?'active':''}">
+        <input type="radio" name="grupo" value="0832" ${formData.grupo==='0832'?'checked':''}>
+        <span class="radio-dot"></span> Grupo 0832 — PART REDES / CONSTRUÇÃO
+      </label>
+      <label class="radio-btn ${formData.grupo==='0833'?'active':''}">
+        <input type="radio" name="grupo" value="0833" ${formData.grupo==='0833'?'checked':''}>
+        <span class="radio-dot"></span> Grupo 0833 — PART REDES / LINHA VIVA
+      </label>
+    </div>
+  </div>`;
+
+  c.querySelectorAll('.radio-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const input = this.querySelector('input');
+      const name = input.name;
+      c.querySelectorAll(`.radio-btn input[name="${name}"]`).forEach(i => i.closest('.radio-btn').classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+}
+
+// --- STEP 4: Resultado ---
+function renderStep4(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Unidades de Equipes de Base (UEBs)</div>
+    <div class="field-group mono" style="max-width:200px">
+      <label>Quantidade de UEBs</label>
+      <input type="number" id="num_uebs" value="${esc(formData.num_uebs)}" placeholder="Ex: 9" min="1">
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Resultado</div>
+    <div class="result-select">
+      <div class="result-card atende ${formData.resultado==='ATENDE'?'active':''}" onclick="setResultado('ATENDE',this)">✓ ATENDE</div>
+      <div class="result-card nao-atende ${formData.resultado==='NÃO ATENDE'?'active':''}" onclick="setResultado('NÃO ATENDE',this)">✗ NÃO ATENDE</div>
+    </div>
+  </div>`;
+}
+
+function setResultado(v, el) {
+  formData.resultado = v;
+  document.querySelectorAll('.result-card').forEach(r => r.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// --- STEP 5: Fotos ---
+function renderStep5(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Fotos da Empresa</div>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:20px">Upload opcional. As imagens serão inseridas no PDF na seção 4.</p>
+    <div class="foto-upload">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--text-sub);display:block;margin-bottom:8px">FACHADA</label>
+        <div class="foto-box" onclick="triggerFoto('fachada')" id="foto-fachada-box">
+          ${formData.foto_fachada ? `<img src="${formData.foto_fachada}"><div class="foto-overlay"><span>🔄 Trocar foto</span></div>` : `<span class="foto-icon">🏢</span><span class="foto-label">Clique para fazer upload</span>`}
+        </div>
+        <input type="file" id="foto-fachada" accept="image/*" onchange="loadFoto(this,'fachada')">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--text-sub);display:block;margin-bottom:8px">PÁTIO</label>
+        <div class="foto-box" onclick="triggerFoto('patio')" id="foto-patio-box">
+          ${formData.foto_patio ? `<img src="${formData.foto_patio}"><div class="foto-overlay"><span>🔄 Trocar foto</span></div>` : `<span class="foto-icon">🏗️</span><span class="foto-label">Clique para fazer upload</span>`}
+        </div>
+        <input type="file" id="foto-patio" accept="image/*" onchange="loadFoto(this,'patio')">
+      </div>
+    </div>
+  </div>`;
+}
+
+function triggerFoto(tipo) { document.getElementById('foto-' + tipo).click(); }
+
+function loadFoto(input, tipo) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    formData['foto_' + tipo] = e.target.result;
+    renderStep(); // re-render to show preview
+  };
+  reader.readAsDataURL(file);
+}
+
+// --- STEP 6: Equipe Estrutural ---
+function renderStep6(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Equipe Estrutural</div>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:16px">Forneça o nome, CPF e CTPS para cada função. Caso não se aplique, informe "NÃO SE APLICA".</p>
+    <table class="dyn-table" id="tbl-estrutural">
+      <thead><tr><th style="width:35%">Nome</th><th>Função</th><th style="width:14%" class="mono">CPF</th><th style="width:14%" class="mono">CTPS</th><th style="width:40px"></th></tr></thead>
+      <tbody id="tbody-estrutural"></tbody>
+    </table>
+    <button class="btn-add-row" onclick="addMembroEstrutural()">+ Adicionar membro</button>
+  </div>`;
+  renderTbodyEstrutural();
+}
+
+function renderTbodyEstrutural() {
+  const tbody = document.getElementById('tbody-estrutural');
+  if (!tbody) return;
+  tbody.innerHTML = formData.equipe_estrutural.map((m, i) => `
+    <tr>
+      <td><input type="text" value="${esc(m.nome)}" onchange="formData.equipe_estrutural[${i}].nome=this.value" placeholder="Nome completo"></td>
+      <td><input type="text" value="${esc(m.funcao)}" onchange="formData.equipe_estrutural[${i}].funcao=this.value" placeholder="Função"></td>
+      <td class="mono"><input type="text" value="${esc(m.cpf)}" onchange="formData.equipe_estrutural[${i}].cpf=this.value" placeholder="000.000.000-00"></td>
+      <td class="mono"><input type="text" value="${esc(m.ctps)}" onchange="formData.equipe_estrutural[${i}].ctps=this.value" placeholder="CTPS"></td>
+      <td><button class="btn-remove-row" onclick="removeMembro('estrutural',${i})">✕</button></td>
+    </tr>`).join('');
+}
+
+function addMembroEstrutural() {
+  formData.equipe_estrutural.push({nome:'',funcao:'',cpf:'',ctps:''});
+  renderTbodyEstrutural();
+}
+
+function removeMembro(tipo, i) {
+  if (tipo === 'estrutural') formData.equipe_estrutural.splice(i, 1);
+  renderTbodyEstrutural();
+}
+
+// --- STEP 7: Equipes de Campo ---
+function renderStep7(c) {
+  c.innerHTML = `<div id="equipes-container"></div><button class="btn-add-equipe" onclick="addEquipe()">+ Adicionar Equipe</button>`;
+  renderEquipes();
+}
+
+function renderEquipes() {
+  const container = document.getElementById('equipes-container');
+  if (!container) return;
+  container.innerHTML = formData.equipes_campo.map((eq, ei) => `
+    <div class="equipe-card" id="equipe-${ei}">
+      <div class="equipe-header">
+        <h4>Equipe ${ei + 1}</h4>
+        <button class="btn-remove-equipe" onclick="removeEquipe(${ei})" title="Remover equipe">🗑</button>
+      </div>
+      <div class="equipe-body">
+        <p class="equipe-section-label">Dados do Veículo</p>
+        <div class="equipe-veiculo">
+          <div class="field-group mono">
+            <label>Placa</label>
+            <input type="text" value="${esc(eq.placa)}" onchange="formData.equipes_campo[${ei}].placa=this.value" placeholder="ABC1D23" style="text-transform:uppercase">
+          </div>
+          <div class="field-group mono">
+            <label>Ano do Veículo</label>
+            <input type="text" value="${esc(eq.ano_veiculo)}" onchange="formData.equipes_campo[${ei}].ano_veiculo=this.value" placeholder="2023">
+          </div>
+          <div class="field-group">
+            <label>Marca</label>
+            <input type="text" value="${esc(eq.marca)}" onchange="formData.equipes_campo[${ei}].marca=this.value" placeholder="VW">
+          </div>
+          <div class="field-group">
+            <label>Modelo</label>
+            <input type="text" value="${esc(eq.modelo)}" onchange="formData.equipes_campo[${ei}].modelo=this.value" placeholder="17.230 CRM 4X2">
+          </div>
+          <div class="field-group">
+            <label>Veículo Locado?</label>
+            <select onchange="formData.equipes_campo[${ei}].locado=this.value">
+              <option ${eq.locado==='NÃO'?'selected':''}>NÃO</option>
+              <option ${eq.locado==='SIM'?'selected':''}>SIM</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label>Fabricante Cab. Auxiliar</label>
+            <input type="text" value="${esc(eq.fab_cab)}" onchange="formData.equipes_campo[${ei}].fab_cab=this.value" placeholder="PATENSE">
+          </div>
+          <div class="field-group mono">
+            <label>Ano Fab./Nº Série Cab.</label>
+            <input type="text" value="${esc(eq.ano_cab)}" onchange="formData.equipes_campo[${ei}].ano_cab=this.value" placeholder="2023-11392">
+          </div>
+          <div class="field-group">
+            <label>Fabricante Guindauto/Modelo</label>
+            <input type="text" value="${esc(eq.fab_guindauto)}" onchange="formData.equipes_campo[${ei}].fab_guindauto=this.value" placeholder="ARGOS - AGI 13.5">
+          </div>
+          <div class="field-group mono">
+            <label>Ano Fab./Nº Série Guindauto</label>
+            <input type="text" value="${esc(eq.ano_guindauto)}" onchange="formData.equipes_campo[${ei}].ano_guindauto=this.value" placeholder="2023">
+          </div>
+          <div class="field-group">
+            <label>Fabricante Cesto Acoplado</label>
+            <input type="text" value="${esc(eq.fab_cesto)}" onchange="formData.equipes_campo[${ei}].fab_cesto=this.value" placeholder="NÃO SE APLICA">
+          </div>
+        </div>
+        <p class="equipe-section-label">Membros da Equipe</p>
+        <table class="dyn-table">
+          <thead><tr><th>Nome</th><th>Função</th><th class="mono">CPF</th><th class="mono">CTPS</th><th style="width:40px"></th></tr></thead>
+          <tbody id="tbody-eq-${ei}"></tbody>
+        </table>
+        <button class="btn-add-row" onclick="addMembroCampo(${ei})">+ Adicionar membro</button>
+      </div>
+    </div>`).join('');
+
+  formData.equipes_campo.forEach((eq, ei) => {
+    const tbody = document.getElementById(`tbody-eq-${ei}`);
+    if (tbody) tbody.innerHTML = eq.membros.map((m, mi) => `
+      <tr>
+        <td><input type="text" value="${esc(m.nome)}" onchange="formData.equipes_campo[${ei}].membros[${mi}].nome=this.value" placeholder="Nome"></td>
+        <td><input type="text" value="${esc(m.funcao)}" onchange="formData.equipes_campo[${ei}].membros[${mi}].funcao=this.value" placeholder="Função"></td>
+        <td class="mono"><input type="text" value="${esc(m.cpf)}" onchange="formData.equipes_campo[${ei}].membros[${mi}].cpf=this.value" placeholder="000.000.000-00"></td>
+        <td class="mono"><input type="text" value="${esc(m.ctps)}" onchange="formData.equipes_campo[${ei}].membros[${mi}].ctps=this.value" placeholder="CTPS"></td>
+        <td><button class="btn-remove-row" onclick="removeMembroCampo(${ei},${mi})">✕</button></td>
+      </tr>`).join('');
+  });
+}
+
+function addEquipe() {
+  formData.equipes_campo.push(newEquipe(formData.equipes_campo.length + 1));
+  renderEquipes();
+}
+
+function removeEquipe(i) {
+  if (formData.equipes_campo.length <= 1) { showToast('O relatório precisa ter ao menos 1 equipe.'); return; }
+  formData.equipes_campo.splice(i, 1);
+  renderEquipes();
+}
+
+function addMembroCampo(ei) {
+  formData.equipes_campo[ei].membros.push({nome:'',funcao:'',cpf:'',ctps:''});
+  renderEquipes();
+}
+
+function removeMembroCampo(ei, mi) {
+  formData.equipes_campo[ei].membros.splice(mi, 1);
+  renderEquipes();
+}
+
+// --- STEP 8: Observações ---
+function renderStep8(c) {
+  const defaultObs = formData.observacoes || gerarObservacaoDefault();
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Observações Gerais</div>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:16px">O texto foi pré-preenchido com o modelo padrão. Edite conforme necessário.</p>
+    <div class="field-group">
+      <label>Texto das Observações</label>
+      <textarea id="observacoes" rows="12">${esc(defaultObs)}</textarea>
+    </div>
+  </div>`;
+}
+
+function gerarObservacaoDefault() {
+  const rs = formData.razao_social || '[RAZÃO SOCIAL]';
+  const grupo = formData.grupo || '0832';
+  return `A inserção dessa empresa no grupo ${grupo} tem como base a condição do fornecedor ser prestador de serviços considerando análise das condições pela regional gestora técnica contrato, está dispensada para emissão do relatório de VCTE a visita técnica presencial.
+
+Dessa forma de acordo com a gerência, as equipes que constam no ANEXO 01 (VCTE ${grupo}) que a ${rs} apresentou são compostas por funcionários, veículos, equipamentos e ferramentas que passaram pela verificação durante a ATE e não possuem pendência para aproveitamento da ATE para subsidiar a VCTE.
+
+Todos os funcionários e equipamentos relacionados devem estar com o cadastro ativo GESET e SC-MONTREAL e em situação regular nos sistemas da CEMIG, a confirmação das informações é de inteira responsabilidade da Gestão técnica do contrato baseadas na Avaliação Técnica de Empreiteira – ATE.
+
+A regional fica como única responsável pela inspeção da empresa ${rs} respondendo por toda a veracidade e conferência dos funcionários e os cursos devidamente realizados por cargo, da integridade laudos e testes dos veículos, conferência dos laudos e condições de uso dos equipamentos e ferramentas.`;
+}
+
+// --- STEP 9: GESET ---
+function renderStep9(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Verificação no GESET</div>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:20px">Informe a data e hora em que foi realizada a verificação do status dos empregados no sistema GESET.</p>
+    <div class="field-grid cols-2" style="max-width:400px">
+      <div class="field-group">
+        <label>Data da Verificação</label>
+        <input type="date" id="geset_data" value="${esc(formData.geset_data)}">
+      </div>
+      <div class="field-group mono">
+        <label>Hora (ex: 15h20m)</label>
+        <input type="text" id="geset_hora" value="${esc(formData.geset_hora)}" placeholder="15h20m">
+      </div>
+    </div>
+  </div>`;
+}
+
+// --- STEP 10: Conclusão ---
+function renderStep10(c) {
+  const defaultConc = formData.conclusao || gerarConclusaoDefault();
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Conclusão</div>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:16px">Texto pré-preenchido com base no resultado da avaliação. Edite se necessário.</p>
+    <div class="field-group">
+      <label>Texto de Conclusão</label>
+      <textarea id="conclusao" rows="8">${esc(defaultConc)}</textarea>
+    </div>
+  </div>`;
+}
+
+function gerarConclusaoDefault() {
+  const rs = formData.razao_social || '[RAZÃO SOCIAL]';
+  const resultado = formData.resultado || 'ATENDE';
+  return `Diante das conformidades verificadas durante a avaliação da empresa ${rs}, e considerando as exigências estabelecidas na Instrução para Cadastramento de Fornecedores da CEMIG Distribuição S/A, concluímos que a empresa ${resultado} plenamente aos requisitos previstos na presente VCTE (Verificação de Conformidade Técnica).`;
+}
+
+// --- STEP 11: Assinaturas ---
+function renderStep11(c) {
+  c.innerHTML = `
+  <div class="card">
+    <div class="card-title">Equipe Envolvida</div>
+    <table class="dyn-table">
+      <thead><tr><th>Nome</th><th>Regional / Área</th><th style="width:40px"></th></tr></thead>
+      <tbody id="tbody-equipe-envolvida"></tbody>
+    </table>
+    <button class="btn-add-row" onclick="addMembroEnvolvido()">+ Adicionar membro</button>
+  </div>
+  <div class="card">
+    <div class="card-title">Assinaturas</div>
+    <div class="field-grid cols-2">
+      <div class="field-group">
+        <label>Representante CEMIG Distribuição S.A.</label>
+        <input type="text" id="responsavel_cemig" value="${esc(formData.responsavel_cemig)}" placeholder="Nome do responsável">
+      </div>
+      <div class="field-group">
+        <label>Representante da Empresa Verificada</label>
+        <input type="text" id="responsavel_empresa" value="${esc(formData.responsavel_empresa)}" placeholder="Nome do responsável">
+      </div>
+    </div>
+  </div>`;
+  renderTbodyEnvolvidos();
+}
+
+function renderTbodyEnvolvidos() {
+  const tbody = document.getElementById('tbody-equipe-envolvida');
+  if (!tbody) return;
+  tbody.innerHTML = formData.equipe_envolvida.map((m, i) => `
+    <tr>
+      <td><input type="text" value="${esc(m.nome)}" onchange="formData.equipe_envolvida[${i}].nome=this.value" placeholder="Nome completo"></td>
+      <td><input type="text" value="${esc(m.regional)}" onchange="formData.equipe_envolvida[${i}].regional=this.value" placeholder="Ex: NE/PR, PE/EM"></td>
+      <td><button class="btn-remove-row" onclick="removeEnvolvido(${i})">✕</button></td>
+    </tr>`).join('');
+}
+
+function addMembroEnvolvido() {
+  formData.equipe_envolvida.push({nome:'',regional:''});
+  renderTbodyEnvolvidos();
+}
+
+function removeEnvolvido(i) {
+  formData.equipe_envolvida.splice(i, 1);
+  renderTbodyEnvolvidos();
+}
+
+// ===== COLLECT DATA FROM DOM =====
+function collectCurrentStep() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  const maps = [
+    ['razao_social','cnpj','numero_vcte','ano','data_inspecao','data_relatorio'],
+    ['endereco','pessoa_contato','telefone','email'],
+    [], // radio handled separately
+    ['num_uebs'],
+    [], // fotos handled separately
+    [], // dynamic table
+    [], // dynamic equipes
+    ['observacoes'],
+    ['geset_data','geset_hora'],
+    ['conclusao'],
+    ['responsavel_cemig','responsavel_empresa']
+  ];
+
+  const fields = maps[currentStep] || [];
+  fields.forEach(f => { const v = get(f); if (v !== undefined) formData[f] = v; });
+
+  // Step 3 radios
+  if (currentStep === 2) {
+    const tipo = document.querySelector('input[name="tipo"]:checked');
+    if (tipo) formData.tipo_avaliacao = tipo.value;
+    const grupo = document.querySelector('input[name="grupo"]:checked');
+    if (grupo) formData.grupo = grupo.value;
+  }
+
+  autoSave();
+}
+
+// ===== NAVIGATION =====
+function nextStep() {
+  collectCurrentStep();
+  if (currentStep < STEPS.length - 1) {
+    currentStep++;
+    renderSidebar();
+    renderStep();
+    document.getElementById('main').scrollTo(0, 0);
+  }
+}
+
+function prevStep() {
+  collectCurrentStep();
+  if (currentStep > 0) {
+    currentStep--;
+    renderSidebar();
+    renderStep();
+    document.getElementById('main').scrollTo(0, 0);
+  }
+}
+
+// ===== AUTO SAVE =====
+async function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveReport, 1500);
+}
+
+async function saveReport() {
+  if (!sbClient) return;
+  const payload = {
+    numero_vcte: formData.numero_vcte || null,
+    ano: formData.ano || null,
+    razao_social: formData.razao_social || null,
+    cnpj: formData.cnpj || null,
+    data_inspecao: formData.data_inspecao || null,
+    data_relatorio: formData.data_relatorio || null,
+    resultado: formData.resultado || 'rascunho',
+    dados: formData,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    if (currentReportId) {
+      await sbClient.from('vcte_relatorios_part').update(payload).eq('id', currentReportId);
+    } else {
+      const { data, error } = await sbClient.from('vcte_relatorios_part').insert(payload).select().single();
+      if (error) throw error;
+      currentReportId = data.id;
+    }
+    document.getElementById('progress-info').textContent = '✓ Salvo em ' + new Date().toLocaleTimeString('pt-BR');
+  } catch(e) {
+    document.getElementById('progress-info').textContent = '⚠ Erro ao salvar';
+    console.error(e);
+  }
+}
+
+// ===== REPORTS LIST =====
+async function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+  const listEl = document.getElementById('reports-list');
+  listEl.innerHTML = '<p style="color:var(--gray);text-align:center;padding:40px">Carregando...</p>';
+
+  try {
+    const { data, error } = await sbClient.from('vcte_relatorios_part')
+      .select('id,numero_vcte,ano,razao_social,cnpj,resultado,data_relatorio,updated_at')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      listEl.innerHTML = '<p style="color:var(--gray);text-align:center;padding:40px">Nenhum relatório encontrado.</p>';
+      return;
+    }
+
+    listEl.innerHTML = data.map(r => `
+      <div class="report-list-item">
+        <div class="info">
+          <h4>${r.razao_social || 'Sem título'} ${r.numero_vcte ? `— VCTE Nº ${r.numero_vcte}` : ''} ${r.ano ? `/ ${r.ano}` : ''}</h4>
+          <p>CNPJ: ${r.cnpj || '—'} · Atualizado: ${new Date(r.updated_at).toLocaleDateString('pt-BR')}</p>
+        </div>
+        <div class="report-actions">
+          <span class="badge ${r.resultado === 'ATENDE' ? 'atende' : r.resultado === 'NÃO ATENDE' ? 'nao-atende' : 'rascunho'}">${r.resultado || 'RASCUNHO'}</span>
+          <button class="btn-sm outline" onclick="loadReport('${r.id}')">Abrir</button>
+          <button class="btn-sm danger" onclick="deleteReport('${r.id}', event)">Excluir</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = `<p style="color:var(--red);text-align:center;padding:40px">Erro: ${e.message}</p>`;
+  }
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+async function loadReport(id) {
+  try {
+    const { data, error } = await sbClient.from('vcte_relatorios_part').select('*').eq('id', id).single();
+    if (error) throw error;
+    formData = { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...data.dados };
+    currentReportId = id;
+    currentStep = 0;
+    closeModal();
+    renderSidebar();
+    renderStep();
+    showToast('Relatório carregado ✓', 'success');
+  } catch(e) {
+    showToast('Erro ao carregar: ' + e.message, 'error');
+  }
+}
+
+async function deleteReport(id, e) {
+  e.stopPropagation();
+  if (!confirm('Tem certeza que deseja excluir este relatório? Esta ação não pode ser desfeita.')) return;
+  try {
+    await sbClient.from('vcte_relatorios_part').delete().eq('id', id);
+    if (currentReportId === id) { newReport(); }
+    openModal();
+    showToast('Relatório excluído.', 'success');
+  } catch(e) {
+    showToast('Erro ao excluir.', 'error');
+  }
+}
+
+function newReport() {
+  formData = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  currentReportId = null;
+  currentStep = 0;
+  renderSidebar();
+  renderStep();
+}
+
+// ===== PDF GENERATION =====
+async function generatePDF() {
+  collectCurrentStep();
+  showToast('Gerando PDF...', '');
+
+  // Save first
+  await saveReport();
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const ml = 18, mr = 18, mt = 20;
+  let y = mt;
+
+  const W = pw - ml - mr;
+
+  // Helper functions
+  const rgb = (r,g,b) => ({ r, g, b });
+  const NAVY = rgb(10,22,40);
+  const BLUE = rgb(27,58,107);
+  const BLUE_LIGHT = rgb(240,244,255);
+  const WHITE = rgb(255,255,255);
+  const GREEN = rgb(26,122,74);
+  const RED = rgb(192,57,43);
+  const GRAY = rgb(107,114,128);
+
+  function addPage() {
+    doc.addPage();
+    y = mt;
+    addPageHeader();
+  }
+
+  function checkY(needed) { if (y + needed > ph - 20) addPage(); }
+
+  function addPageHeader() {
+    doc.setFillColor(NAVY.r, NAVY.g, NAVY.b);
+    doc.rect(0, 0, pw, 12, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255,255,255);
+    doc.text('RELATÓRIO DE VERIFICAÇÃO E CONFORMIDADE TÉCNICA — VCTE', ml, 8);
+    doc.setFont('helvetica','normal');
+    doc.text(`${formData.razao_social || ''}`, pw - mr, 8, { align: 'right' });
+    y = 18;
+  }
+
+  function sectionTitle(title) {
+    checkY(14);
+    doc.setFillColor(BLUE_LIGHT.r, BLUE_LIGHT.g, BLUE_LIGHT.b);
+    doc.roundedRect(ml, y, W, 9, 2, 2, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.setTextColor(BLUE.r, BLUE.g, BLUE.b);
+    doc.text(title, ml + 4, y + 6);
+    y += 14;
+  }
+
+  function tableHeader(cols, widths) {
+    checkY(9);
+    doc.setFillColor(BLUE.r, BLUE.g, BLUE.b);
+    doc.rect(ml, y, W, 8, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255,255,255);
+    let x = ml + 2;
+    cols.forEach((col, i) => {
+      doc.text(col, x, y + 5.5);
+      x += widths[i];
+    });
+    y += 8;
+  }
+
+  function tableRow(cells, widths, even) {
+    const rowH = 7;
+    checkY(rowH + 2);
+    if (even) {
+      doc.setFillColor(248,250,255);
+      doc.rect(ml, y, W, rowH, 'F');
+    }
+    doc.setDrawColor(220,226,234);
+    doc.line(ml, y + rowH, ml + W, y + rowH);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(30,30,30);
+    let x = ml + 2;
+    cells.forEach((cell, i) => {
+      const maxW = widths[i] - 4;
+      const txt = String(cell || '');
+      doc.text(doc.splitTextToSize(txt, maxW)[0] || '', x, y + 5);
+      x += widths[i];
+    });
+    y += rowH;
+  }
+
+  function infoRow(label, value) {
+    const rowH = 8;
+    checkY(rowH);
+    doc.setFillColor(248,250,255);
+    doc.rect(ml, y, 60, rowH, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(BLUE.r, BLUE.g, BLUE.b);
+    doc.text(label, ml + 2, y + 5.5);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(30,30,30);
+    doc.text(String(value || '—'), ml + 62, y + 5.5);
+    doc.setDrawColor(220,226,234);
+    doc.line(ml, y + rowH, ml + W, y + rowH);
+    y += rowH;
+  }
+
+  // ===== PAGE 1: CAPA / HEADER =====
+  // Big header
+  doc.setFillColor(NAVY.r, NAVY.g, NAVY.b);
+  doc.rect(0, 0, pw, 38, 'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(15);
+  doc.setTextColor(255,255,255);
+  doc.text('RELATÓRIO DE VERIFICAÇÃO E CONFORMIDADE TÉCNICA', pw/2, 16, { align: 'center' });
+  doc.setFontSize(12);
+  doc.setTextColor(232,185,0);
+  doc.text('VCTE', pw/2, 26, { align: 'center' });
+  doc.setFontSize(9);
+  doc.setTextColor(180,200,255);
+  doc.text('CEMIG DISTRIBUIÇÃO S.A.', pw/2, 33, { align: 'center' });
+  y = 48;
+
+  // ID table
+  doc.setFillColor(BLUE.r, BLUE.g, BLUE.b);
+  doc.rect(ml, y, W, 9, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
+  const idW = [W*0.5, W*0.25, W*0.25];
+  doc.text('RAZÃO SOCIAL DA EMPRESA VERIFICADA', ml+2, y+6);
+  doc.text('CNPJ', ml+idW[0]+2, y+6);
+  doc.text('N° VCTE / ANO', ml+idW[0]+idW[1]+2, y+6);
+  y += 9;
+
+  doc.setFillColor(248,250,255); doc.rect(ml, y, W, 11, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(NAVY.r, NAVY.g, NAVY.b);
+  doc.text(formData.razao_social || '—', ml+2, y+7.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text(formData.cnpj || '—', ml+idW[0]+2, y+7.5);
+  doc.setFont('helvetica','bold');
+  doc.text(`${formData.numero_vcte || '—'} / ${formData.ano || '—'}`, ml+idW[0]+idW[1]+2, y+7.5);
+  doc.setDrawColor(210,220,235); doc.rect(ml, y, W, 11, 'D');
+  y += 14;
+
+  // Dates
+  doc.setFillColor(BLUE.r, BLUE.g, BLUE.b); doc.rect(ml, y, W, 9, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
+  doc.text('DATA DA INSPEÇÃO', ml+2, y+6);
+  doc.text('DATA DO RELATÓRIO', ml+W/2+2, y+6);
+  y += 9;
+  doc.setFillColor(255,255,255); doc.rect(ml, y, W, 10, 'F');
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(NAVY.r, NAVY.g, NAVY.b);
+  doc.text(formatDate(formData.data_inspecao), ml+2, y+7);
+  doc.text(formatDate(formData.data_relatorio), ml+W/2+2, y+7);
+  doc.setDrawColor(210,220,235); doc.rect(ml, y, W, 10, 'D');
+  y += 16;
+
+  // Section 2: Cadastro
+  sectionTitle('1. INFORMAÇÕES CADASTRAIS');
+  infoRow('ENDEREÇO', formData.endereco);
+  infoRow('PESSOA DE CONTATO', formData.pessoa_contato);
+  infoRow('TELEFONE', formData.telefone);
+  infoRow('E-MAIL', formData.email);
+  y += 6;
+
+  // Section 3: Avaliação
+  sectionTitle('2. DADOS DA AVALIAÇÃO');
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(30,30,30);
+  const tipoText = formData.tipo_avaliacao === 'habilitacao' ? '☑ Habilitação Cadastral Inicial    ☐ Reavaliação' : '☐ Habilitação Cadastral Inicial    ☑ Reavaliação';
+  doc.text(tipoText, ml, y); y += 8;
+  const grupoText = formData.grupo === '0832'
+    ? '☑ Grupo 0832 – PART REDES/CONSTRUÇÃO    ☐ Grupo 0833 – PART REDES/LINHA VIVA'
+    : '☐ Grupo 0832 – PART REDES/CONSTRUÇÃO    ☑ Grupo 0833 – PART REDES/LINHA VIVA';
+  doc.text(grupoText, ml, y); y += 12;
+
+  // Section 4: Resultado
+  sectionTitle('3. RESULTADO DA AVALIAÇÃO');
+  const isAtende = formData.resultado === 'ATENDE';
+  doc.setFillColor(isAtende ? GREEN.r : RED.r, isAtende ? GREEN.g : RED.g, isAtende ? GREEN.b : RED.b);
+  doc.roundedRect(ml, y, 80, 14, 3, 3, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
+  doc.text(`UEBs: ${formData.num_uebs || '—'}  —  ${formData.resultado || '—'}`, ml+8, y+9.5);
+  y += 22;
+
+  // Section 5: Fotos
+  if (formData.foto_fachada || formData.foto_patio) {
+    checkY(80);
+    sectionTitle('4. APRESENTAÇÃO DA EMPRESA');
+    const imgW = (W - 8) / 2;
+    if (formData.foto_fachada) {
+      try {
+        doc.text('Fachada', ml, y + 4);
+        doc.addImage(formData.foto_fachada, 'JPEG', ml, y + 8, imgW, 60);
+      } catch(e) {}
+    }
+    if (formData.foto_patio) {
+      try {
+        doc.text('Pátio', ml + imgW + 10, y + 4);
+        doc.addImage(formData.foto_patio, 'JPEG', ml + imgW + 10, y + 8, imgW, 60);
+      } catch(e) {}
+    }
+    y += 76;
+  }
+
+  // Section 6: Equipe Estrutural
+  addPage();
+  sectionTitle('5. EQUIPE ESTRUTURAL');
+  const esW = [W*0.35, W*0.3, W*0.18, W*0.17];
+  tableHeader(['NOME','FUNÇÃO','CPF','CTPS'], esW);
+  formData.equipe_estrutural.forEach((m, i) => tableRow([m.nome, m.funcao, m.cpf, m.ctps], esW, i%2===0));
+  y += 8;
+
+  // Section 7: Equipes de Campo
+  formData.equipes_campo.forEach((eq, ei) => {
+    checkY(20);
+    sectionTitle(`6.${ei+1} EQUIPE ${ei+1} — Veículo: ${eq.placa || '—'}`);
+    
+    // Veículo info
+    const vW = [W*0.25, W*0.25, W*0.25, W*0.25];
+    tableHeader(['PLACA','ANO VEÍ.','MARCA','MODELO'], vW);
+    tableRow([eq.placa, eq.ano_veiculo, eq.marca, eq.modelo], vW, false);
+    y += 2;
+    tableHeader(['FAB. CAB. AUX.','ANO/SÉR. CAB.','GUINDAUTO/MOD.','ANO/SÉR. GUIND.'], vW);
+    tableRow([eq.fab_cab, eq.ano_cab, eq.fab_guindauto, eq.ano_guindauto], vW, false);
+    y += 2;
+    infoRow('VEÍCULO LOCADO', eq.locado);
+    infoRow('FABRICANTE CESTO ACOPLADO', eq.fab_cesto);
+    y += 4;
+
+    // Membros
+    const mW = [W*0.35, W*0.25, W*0.2, W*0.2];
+    tableHeader(['NOME','FUNÇÃO','CPF','CTPS'], mW);
+    eq.membros.forEach((m, i) => tableRow([m.nome, m.funcao, m.cpf, m.ctps], mW, i%2===0));
+    y += 8;
+  });
+
+  // Section 8: Observações
+  addPage();
+  sectionTitle('6. OBSERVAÇÕES GERAIS');
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(30,30,30);
+  const obsLines = doc.splitTextToSize(formData.observacoes || '', W);
+  obsLines.forEach(line => { checkY(7); doc.text(line, ml, y); y += 6; });
+  y += 6;
+
+  // Section 9: GESET
+  sectionTitle('7. VERIFICAÇÃO DO STATUS DOS EMPREGADOS NO GESET');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(30,30,30);
+  doc.text(`Verificação realizada no GESET em ${formatDate(formData.geset_data)}, às ${formData.geset_hora || '—'}`, ml, y);
+  y += 12;
+
+  // Section 10: Conclusão
+  sectionTitle('8. CONCLUSÃO');
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(30,30,30);
+  const concLines = doc.splitTextToSize(formData.conclusao || '', W);
+  concLines.forEach(line => { checkY(7); doc.text(line, ml, y); y += 6; });
+  y += 6;
+
+  // Section 11: Equipe e Assinaturas
+  checkY(50);
+  sectionTitle('9. EQUIPE ENVOLVIDA');
+  formData.equipe_envolvida.forEach(m => {
+    if (m.nome) {
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(30,30,30);
+      doc.text(`${m.nome}${m.regional ? ' — ' + m.regional : ''}`, ml, y); y += 6;
+    }
+  });
+  y += 16;
+
+  // Assinaturas
+  checkY(40);
+  doc.setDrawColor(100,100,100); doc.setLineWidth(0.4);
+  const sig1x = ml, sig2x = ml + W/2 + 10;
+  const sigW = W/2 - 10;
+  doc.line(sig1x, y, sig1x + sigW, y);
+  doc.line(sig2x, y, sig2x + sigW, y);
+  y += 5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(NAVY.r, NAVY.g, NAVY.b);
+  doc.text('CEMIG DISTRIBUIÇÃO S.A.', sig1x, y, { align: 'left' });
+  doc.text(formData.razao_social || 'EMPRESA VERIFICADA', sig2x, y);
+  y += 5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(GRAY.r, GRAY.g, GRAY.b);
+  doc.text(formData.responsavel_cemig || '', sig1x, y);
+  doc.text(formData.responsavel_empresa || '', sig2x, y);
+  y += 16;
+
+  // Footer on all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFillColor(NAVY.r, NAVY.g, NAVY.b);
+    doc.rect(0, ph - 10, pw, 10, 'F');
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(180,200,255);
+    doc.text('Classificação: Direcionado — CEMIG Distribuição S.A.', ml, ph - 4);
+    doc.text(`Página ${p} de ${totalPages}`, pw - mr, ph - 4, { align: 'right' });
+  }
+
+  // Save PDF to Supabase
+  const pdfBase64 = doc.output('datauristring');
+  if (currentReportId) {
+    try {
+      await sbClient.from('vcte_relatorios_part').update({ pdf_base64: pdfBase64 }).eq('id', currentReportId);
+    } catch(e) { console.error('Erro ao salvar PDF no Supabase', e); }
+  }
+
+  const fileName = `VCTE_${formData.numero_vcte || 'N'}_${formData.ano || ''}_${(formData.razao_social || 'relatorio').replace(/\s+/g,'_').substring(0,20)}.pdf`;
+  doc.save(fileName);
+  showToast('PDF gerado e salvo! ✓', 'success');
+}
+
+// ===== UTILS =====
+function esc(v) { return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function formatDate(d) {
+  if (!d) return '—';
+  try {
+    const [y,m,day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  } catch { return d; }
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 3000);
+}
+</script>
+</body>
+</html>
